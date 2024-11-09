@@ -1,0 +1,9 @@
+<library path="lib/librotation_shim_controller">
+  <class name="rotation_shim_controller/RotationShimController"
+         type="rotation_shim_controller::RotationShimController"
+         base_class_type="nav_core::BaseLocalPlanner">
+    <description>
+      Rotation Shim Controller
+    </description>
+  </class>
+</library>

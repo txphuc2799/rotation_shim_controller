@@ -1,0 +1,127 @@
+base_local_planner: rotation_shim_controller/RotationShimController
+RotationShimController:
+  # primary_controller: dwb_controller/DWBController
+  primary_controller: vector_pursuit_controller/VectorPursuitController
+  controller_frequency: 20.0
+  transform_tolerance: 0.5
+  simulate_ahead_time: 1.0
+  angular_dist_threshold: 0.17 # Angle threshold for switch to primary controller
+  forward_sampling_distance: 0.5
+  goal_angular_vel_scaling_angle: 0.26
+  goal_angle_scaling_factor: 0.8
+  rotate_to_goal_max_angular_vel: 0.4
+  rotate_to_goal_min_angular_vel: 0.1
+
+  # Vector Pure Pursuit
+  VectorPursuitController:
+    odom_topic: /odometry/filtered
+    control_frequency: 20.0
+    k: 6.0
+    desired_linear_vel: 0.75
+    desired_linear_vel_backwards: 0.2
+    min_turning_radius: 0.25
+    lookahead_dist: 1.0
+    min_lookahead_dist: 0.5
+    max_lookahead_dist: 1.5
+    lookahead_time: 1.7
+    transform_tolerance: 0.2
+    use_velocity_scaled_lookahead_dist: true
+    min_linear_velocity: 0.0
+    min_approach_linear_velocity: 0.0
+    approach_velocity_scaling_dist: 1.0
+    max_allowed_time_to_collision_up_to_target: 1.0
+    scale_factor: 0.9
+    use_collision_detection: true
+    use_cost_regulated_linear_velocity_scaling: true
+    cost_scaling_dist: 0.5
+    cost_scaling_gain: 1.0
+    inflation_cost_scaling_factor: 3.0
+    use_rotate_to_heading: true
+    rotate_to_heading_min_angle: 0.55
+    path_angular_vel_scaling_angle: 0.26
+    path_angle_scaling_factor: 1.3
+    rotate_to_path_max_angular_vel: 0.3
+    rotate_to_path_min_angular_vel: 0.1
+    allow_reversing: false
+    max_angular_accel: 1.5
+    max_linear_accel: 1.5
+    max_lateral_accel: 0.15
+    max_robot_pose_search_dist: 10.0
+    use_interpolation: true
+    use_heading_from_path: false
+    goal_angular_vel_scaling_angle: 0.26
+    goal_angle_scaling_factor: 0.8
+    rotate_to_goal_max_angular_vel: 0.4
+    rotate_to_goal_min_angular_vel: 0.1
+    xy_goal_tolerance: 0.05
+    yaw_tolerance: 0.02
+
+# DWB Controller
+  DWBController:
+    odom_topic: /odometry/filtered
+    debug_trajectory_details: True
+    max_vel_x: 0.7
+    min_vel_x: 0.0
+    max_vel_y: 0.0
+    min_vel_y: 0.0
+    min_speed_xy: 0.0
+    max_speed_xy: 0.7
+    max_vel_theta: 1.0
+    min_speed_theta: 0.0
+    acc_lim_x: 2.5
+    acc_lim_y: 0.0
+    acc_lim_theta: 3.2
+    decel_lim_x: -2.5
+    decel_lim_y: 0.0
+    decel_lim_theta: -3.2
+    vx_samples: 20
+    vy_samples: 1
+    vtheta_samples: 20
+    sim_time: 1.0
+    linear_granularity: 0.05
+    angular_granularity: 0.025
+    transform_tolerance: 0.2
+    short_circuit_trajectory_evaluation: True
+    limit_vel_cmd_in_traj: False
+    stateful: True
+    GoalChecker:
+      controller_frequency: 20.0
+      goal_angular_vel_scaling_angle: 0.26
+      goal_angle_scaling_factor: 0.6
+      rotate_to_goal_max_angular_vel: 0.5
+      rotate_to_goal_min_angular_vel: 0.1
+      xy_goal_tolerance: 0.05
+      yaw_tolerance: 0.02
+    critics: ["Oscillation", "ObstacleFootprint", "GoalAlign", "GoalDist", "PathAlign", "PathDist", "PathProgress"]
+    Oscillation:
+      oscillation_time_threshold: 3.0
+      oscillation_distance: 0.1
+      x_only_threshold: 0.05
+    ObstacleFootprint:
+      scale: 0.02
+    GoalAlign:
+      scale: 24.0
+      forward_point_distance: 0.325
+    GoalDist:
+      scale: 24.0
+    PathAlign:
+      scale: 32.0
+      forward_point_distance: 0.325
+    PathDist:
+      scale: 32.0
+    PathProgress:
+      scale: 24.0
+      heading_scale: 0.1
+      xy_local_goal_tolerance: 0.1
+      angle_threshold: 0.2
+    
+    prune_plan: true
+    prune_distance: 2.0
+    
+    publish_evaluation: false
+    publish_global_plan: false
+    publish_transformed_plan: false
+    publish_local_plan: true
+    publish_trajectories: false
+    publish_cost_grid_pc: false
+    marker_lifetime: 0.5
