@@ -41,7 +41,7 @@ void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, c
       plugin_name_.c_str(), primary_controller.c_str());
     }
     catch(const pluginlib::PluginlibException &ex){
-      ROS_DEBUG("Failed to create internal controller for rotation shimming. Exception: %s", ex.what());
+      ROS_DEBUG("%s: Failed to create internal controller for rotation shimming. Exception: %s", plugin_name_.c_str(), ex.what());
     }
 
     // initialize collision checker and set costmap
@@ -82,6 +82,22 @@ bool RotationShimController::setPlan(const std::vector<geometry_msgs::PoseStampe
   current_path_.clear();
   current_path_ = orig_global_plan;
 
+  if (current_path_.empty()) {
+    ROS_ERROR("%s: Received plan with zero length", plugin_name_.c_str());
+    return false;
+  }
+
+  if (has_new_goal_ || hasGoalChanged(goal_pose_)) {
+    last_goal_ = goal_pose_;
+    has_new_goal_ = false;
+    path_updated_ = true;
+  }
+
+  // Save goal pose
+  goal_pose_.header.frame_id = current_path_[0].header.frame_id;
+  goal_pose_.header.stamp = current_path_[0].header.stamp;
+  goal_pose_.pose = current_path_.back().pose;
+
   return primary_controller_->setPlan(orig_global_plan);
 }
 
@@ -96,16 +112,10 @@ bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_v
   geometry_msgs::PoseStamped robot_pose;
   costmap_ros_->getRobotPose(robot_pose);
   
-  try {
+  if (current_path_.size() >= 2) {
     geometry_msgs::Pose sampled_pt_base = transformPoseToBaseFrame(getSampledPathPt());
     double angle_to_path =
           std::atan2(sampled_pt_base.position.y, sampled_pt_base.position.x);
-
-    if (has_new_goal_ || hasGoalChanged(goal_pose_)) {
-      last_goal_ = goal_pose_;
-      has_new_goal_ = false;
-      path_updated_ = true;
-    }
 
     if (path_updated_) {
       if (shouldRotateToPath(angle_to_path)){
@@ -118,8 +128,6 @@ bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_v
         }
       }
     }
-  } catch(const std::runtime_error & e) {
-    ROS_DEBUG("%s: %s", plugin_name_.c_str(), e.what());
   }
   path_updated_ = false;
   
@@ -149,15 +157,6 @@ bool RotationShimController::isGoalReached()
 
 geometry_msgs::PoseStamped RotationShimController::getSampledPathPt()
 {
-  if (current_path_.size() < 2) {
-    throw std::runtime_error("Path is too short to find a valid sampled path point for rotation.");
-  }
-
-  // Save goal pose
-  goal_pose_.header.frame_id = current_path_[0].header.frame_id;
-  goal_pose_.header.stamp = current_path_[0].header.stamp;
-  goal_pose_.pose = current_path_.back().pose;
-
   geometry_msgs::Pose start = current_path_.front().pose;
   double dx, dy;
 
