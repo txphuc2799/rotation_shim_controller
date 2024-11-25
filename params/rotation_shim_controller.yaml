@@ -4,6 +4,7 @@ RotationShimController:
   odom_topic: /odometry/filtered
   controller_frequency: 20.0
   forward_sampling_distance: 0.5
+  path_length_thresh: 3.0
   angular_dist_threshold: 0.55
   rotate_to_heading_angular_vel: 0.5
   max_angular_accel: 1.0
