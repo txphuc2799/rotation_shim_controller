@@ -3,6 +3,7 @@
 
 #include <ros/ros.h>
 #include <nav_core/base_local_planner.h>
+#include <base_local_planner/odometry_helper_ros.h>
 #include <pluginlib/class_loader.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <costmap_2d/costmap_2d_ros.h>
@@ -12,12 +13,19 @@
 #include <std_msgs/Bool.h>
 #include <rotation_shim_controller/utils.h>
 #include <rotation_shim_controller/footprint_collision_checker.hpp>
+#include <rotation_shim_controller/RotationShimControllerConfig.h>
+#include <dynamic_reconfigure/server.h>
 
 namespace rotation_shim_controller
 {
 
 class RotationShimController : public nav_core::BaseLocalPlanner
 {
+
+typedef rotation_shim_controller::RotationShimControllerConfig Config;
+typedef dynamic_reconfigure::Server<Config> ParamterConfigServer;
+typedef dynamic_reconfigure::Server<Config>::CallbackType CallbackType;
+
 public:
     /**
     * @brief Default constructor of the plugin
@@ -73,10 +81,12 @@ protected:
      */
     geometry_msgs::Pose transformPoseToBaseFrame(const geometry_msgs::PoseStamped & pt);
     
-    bool shouldRotateToPath(double angle_to_path);
+    bool shouldRotateToPath(const double & angular_distance_to_heading);
 
-    bool rotateToHeading(double & linear_vel, double & angular_vel,
-                         double angle_to_path, const geometry_msgs::PoseStamped & robot_pose);
+    bool computeRotateToHeadingCommand(geometry_msgs::Twist& cmd_vel,
+                                       const double & angular_distance_to_heading,
+                                       const geometry_msgs::Twist & velocity,
+                                       const geometry_msgs::PoseStamped & robot_pose);
 
     bool hasGoalChanged(const geometry_msgs::PoseStamped &new_goal);
     
@@ -91,31 +101,33 @@ protected:
      * @param pose Starting pose of robot
      */
     bool isCollisionFree(
-        double & linear_vel, double & angular_vel,
-        bool is_stopped,
+        const geometry_msgs::Twist & cmd_vel,
+        const double & angular_distance_to_heading,
         const geometry_msgs::PoseStamped & pose);
+    
+    void reconfigureCB(Config& config, uint32_t level);
 
 protected:
     pluginlib::ClassLoader<nav_core::BaseLocalPlanner> lp_loader_;
-    boost::shared_ptr<nav_core::BaseLocalPlanner> primary_controller_;
+    boost::shared_ptr<nav_core::BaseLocalPlanner> controller_;
+    base_local_planner::OdometryHelperRos odom_helper_;
     std::unique_ptr<FootprintCollisionChecker<costmap_2d::Costmap2D *>>
     collision_checker_;
 
     tf2_ros::Buffer* tf_;
     costmap_2d::Costmap2DROS* costmap_ros_;
 
-    std::string primary_controller;
+    std::string primary_controller_;
     std::string plugin_name_ = "RotationShimController";
-    
+    std::string odom_topic_;
     double forward_sampling_distance_, angular_dist_threshold_;
-    double goal_angular_vel_scaling_angle_;
-    double goal_angle_scaling_factor_;
-    double rotate_to_goal_max_angular_vel_;
-    double rotate_to_goal_min_angular_vel_;
+    double rotate_to_heading_angular_vel_;
+    double max_angular_accel_;
     double simulate_ahead_time_;
     double transform_tolerance_;
-    double control_duration_, controller_frequency;
+    double control_duration_, controller_frequency_;
 
+    geometry_msgs::Twist robot_vel_;
     std::vector<geometry_msgs::PoseStamped> current_path_;
     geometry_msgs::PoseStamped goal_pose_;
     geometry_msgs::PoseStamped last_goal_;
@@ -123,7 +135,10 @@ protected:
     bool initialized_;
     bool has_new_goal_;
     bool path_updated_;
+
+    // Dynamic parameters handler
     std::mutex mutex_;
+    ParamterConfigServer* dynamic_srv_;
 
     ros::Subscriber run_controller_sub_;
 };

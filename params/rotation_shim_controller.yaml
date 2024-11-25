@@ -1,16 +1,14 @@
 base_local_planner: rotation_shim_controller/RotationShimController
 RotationShimController:
-  # primary_controller: dwb_controller/DWBController
-  primary_controller: vector_pursuit_controller/VectorPursuitController
+  primary_controller: teb_local_planner/TebLocalPlannerROS
+  odom_topic: /odometry/filtered
   controller_frequency: 20.0
+  forward_sampling_distance: 0.5
+  angular_dist_threshold: 0.55
+  rotate_to_heading_angular_vel: 0.5
+  max_angular_accel: 1.0
   transform_tolerance: 0.5
   simulate_ahead_time: 1.0
-  angular_dist_threshold: 0.17 # Angle threshold for switch to primary controller
-  forward_sampling_distance: 0.5
-  goal_angular_vel_scaling_angle: 0.26
-  goal_angle_scaling_factor: 0.8
-  rotate_to_goal_max_angular_vel: 0.4
-  rotate_to_goal_min_angular_vel: 0.1
 
   # Vector Pure Pursuit
   VectorPursuitController:
@@ -125,3 +123,129 @@ RotationShimController:
     publish_trajectories: false
     publish_cost_grid_pc: false
     marker_lifetime: 0.5
+
+# TEB Local Planner
+  TebLocalPlannerROS:       
+    odom_topic: /odometry/filtered
+    map_frame: map
+
+    # Trajectory
+    teb_autosize: true                       
+    dt_ref: 0.3                              
+    dt_hysteresis: 0.1                       
+    global_plan_overwrite_orientation: true
+    allow_init_with_backwards_motion: true  
+    max_global_plan_lookahead_dist: 1.7 #3.0 
+    force_reinit_new_goal_dist: 1.0
+    # force_reinit_new_goal_angular:           
+    feasibility_check_no_poses: 5 
+    # feasibility_check_lookahead_distance:           
+    exact_arc_length: false                  
+    publish_feedback: false
+    # control_look_ahead_poses:   
+    prevent_look_ahead_poses_near_goal: 50
+    visualize_with_time_as_z_axis_scale: 0.0              
+    
+    # Via point
+    global_plan_viapoint_sep: 0.5           
+    via_points_ordered: false                
+
+    # Robot
+    max_vel_x: 0.75
+    max_vel_x_backwards: 0.25                
+    max_vel_theta: 0.6                       
+    acc_lim_x: 0.101 #2.0                          
+    acc_lim_theta: 0.101 #1.0                      
+    is_footprint_dynamic: true
+    # use_proportional_saturation:
+    # transform_tolerance:              
+    footprint_model:
+      type: "polygon"
+      vertices: [[0.22,0.22],[-0.6,0.22],[-0.6,-0.22],[0.22,-0.22]]
+
+    # Robot / Carlike
+    min_turning_radius: 0.0 # 0.1                  
+    wheelbase: 0.0 # 1.033809                           
+    cmd_angle_instead_rotvel: false
+
+    # Robot / Omni
+    max_vel_y: 0.0
+    max_vel_trans: 0.0                         
+    acc_lim_y: 0.0                           
+
+    # Goal tolerance
+    xy_goal_tolerance: 0.05                  
+    yaw_goal_tolerance: 0.05                 
+    free_goal_vel: false      # Allow the robot's velocity to be nonzero for planning purposes 
+                              # (the robot can arrive at the goal with max speed)                  
+    # trans_stopped_vel: 0.0
+    # theta_stopped_vel: 0.0
+
+    # Obstacles
+    min_obstacle_dist: 0.015 # 0.481 Minimum desired separation from obstacles
+    inflation_dist: 0.02 # Buffer zone around obstacles with non-zero penalty costs 
+                        # (should be larger than min_obstacle_dist in order to take effect)
+    dynamic_obstacle_inflation_dist: 0.5  # Buffer zone around predicted locations of dynamic obstacles with non-zero penalty costs 
+                                          # (should be larger than min_obstacle_dist in order to take effect)     
+    include_dynamic_obstacles: true         
+    include_costmap_obstacles: true          
+    legacy_obstacle_association: false       
+    obstacle_association_force_inclusion_factor: 1.5  
+    obstacle_association_cutoff_factor: 5.0           
+    costmap_obstacles_behind_robot_dist: 1.0 #1.0 
+    obstacle_poses_affected: 30 
+    #costmap_converter_plugin: ""            #
+    #costmap_converter_spin_thread: true     #
+    #costmap_converter_rate: 5               #
+
+    # Optimization
+    no_inner_iterations: 5   
+    no_outer_iterations: 4
+    optimization_activate: true
+    optimization_verbose: false          
+    penalty_epsilon: 0.1  
+    weight_max_vel_x: 1.0    
+    weight_max_vel_y: 1.0
+    weight_max_vel_theta: 1.0         
+    weight_acc_lim_x: 10.0 #1.0
+    weight_acc_lim_y: 1.0     
+    weight_acc_lim_theta: 10.0 #1.0  
+    weight_kinematics_nh: 3000.0   # 10000.0  
+    weight_kinematics_forward_drive: 1000.0
+    weight_kinematics_turning_radius: 1.0
+    weight_optimaltime: 10.0
+    weight_shortest_path: 0.0   # Optimization weight for contracting the trajectory w.r.t. path length 
+    weight_obstacle: 50.0
+    weight_inflation: 0.2   # 1.0           
+    weight_dynamic_obstacle: 1.0           
+    weight_dynamic_obstacle_inflation: 0.2
+    weight_velocity_obstacle_ratio: 0.0
+    weight_viapoint: 1.0 #100.0                
+    weight_adapt_factor: 2.0
+    obstacle_cost_exponent: 1.0   # Exponent for nonlinear obstacle cost (cost = linear_cost * obstacle_cost_exponent). Set to 1 to disable nonlinear cost (default)                
+
+    # Homotopy Class Planner
+    # enable_homotopy_class_planning: true    
+    enable_multithreading: true              
+    # simple_exploration: false               
+    max_number_classes: 4
+    # max_number_plans_in_current_class:                
+    selection_cost_hysteresis: 1.0 
+    selection_prefer_initial_plan: 1.0
+    selection_obst_cost_scale: 4.0
+    selection_viapoint_cost_scale: 1.0
+    selection_alternative_time_cost: false
+    roadmap_graph_no_samples: 15
+    roadmap_graph_area_width: 6.0
+    roadmap_graph_area_length_scale: 1.0
+    h_signature_prescaler: 1.0 
+    h_signature_threshold: 0.1               
+    # obstacle_keypoint_offset: 0.1           
+    obstacle_heading_threshold: 0.45
+    viapoints_all_candidates: true 
+    visualize_hc_graph: false  
+
+    # Recovery
+    shrink_horizon_backup: true           
+    oscillation_recovery: true
+    oscillation_recovery_min_duration: 10.0

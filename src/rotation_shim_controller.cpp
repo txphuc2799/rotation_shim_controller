@@ -9,44 +9,54 @@ namespace rotation_shim_controller
 {
 RotationShimController::RotationShimController():
   lp_loader_("nav_core", "nav_core::BaseLocalPlanner"),
-  primary_controller_(nullptr),
+  controller_(nullptr),
   initialized_(false),
   path_updated_(false){}
 
 RotationShimController::~RotationShimController()
 {
-  primary_controller_.reset();
+  controller_.reset();
+
+  if (dynamic_srv_) {
+    delete dynamic_srv_;
+    dynamic_srv_ = nullptr;  // Optional: Helps to avoid dangling pointer issues.
+  }
 }
 
 void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, costmap_2d::Costmap2DROS* costmap_ros)
 {
   if (!initialized_){
-
     ros::NodeHandle nh("~/" + name);
-
     tf_ = tf;
     costmap_ros_ = costmap_ros;
-    
     has_new_goal_ = true;
 
     // Initialize parameters
     initParams(nh);
 
     try{
-      primary_controller_ = lp_loader_.createUniqueInstance(primary_controller);
-      std::size_t pos = primary_controller.find_last_of("/");
-      std::string primary_controller_name = primary_controller.substr(pos + 1);
-      primary_controller_->initialize(name + "/" + primary_controller_name, tf, costmap_ros);
+      controller_ = lp_loader_.createUniqueInstance(primary_controller_);
+      std::size_t pos = primary_controller_.find_last_of("/");
+      std::string primary_controller_name = primary_controller_.substr(pos + 1);
+      controller_->initialize(name + "/" + primary_controller_name, tf, costmap_ros);
       ROS_INFO("Created internal controller for rotation shimming: %s of type %s",
-      plugin_name_.c_str(), primary_controller.c_str());
+      plugin_name_.c_str(), primary_controller_.c_str());
     }
     catch(const pluginlib::PluginlibException &ex){
       ROS_DEBUG("%s: Failed to create internal controller for rotation shimming. Exception: %s", plugin_name_.c_str(), ex.what());
     }
 
+    // init the odom helper to receive the robot's velocity from odom messages
+    odom_helper_.setOdomTopic(odom_topic_);
+
     // initialize collision checker and set costmap
     collision_checker_ = std::make_unique<
       FootprintCollisionChecker<costmap_2d::Costmap2D *>>(costmap_ros->getCostmap());
+
+    // Set up parameter reconfigure
+    dynamic_srv_ = new ParamterConfigServer(nh);
+    CallbackType cb = boost::bind(&RotationShimController::reconfigureCB, this, _1, _2);
+    dynamic_srv_->setCallback(cb);
 
     // Create subscriber:
     run_controller_sub_ = nh.subscribe<std_msgs::Bool>("/run_rs_controller", 5,
@@ -59,17 +69,32 @@ void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, c
 
 void RotationShimController::initParams(ros::NodeHandle& nh)
 {
-  nh.param("primary_controller", primary_controller, std::string("teb_local_planner/TebLocalPlannerROS"));
+  nh.param("primary_controller", primary_controller_, std::string("teb_local_planner/TebLocalPlannerROS"));
+  nh.param("odom_topic", odom_topic_, std::string("odom"));
+  nh.param("controller_frequency", controller_frequency_, 15.0);
   nh.param("forward_sampling_distance", forward_sampling_distance_, 0.5);
   nh.param("angular_dist_threshold", angular_dist_threshold_, 0.55);
-  nh.param("goal_angular_vel_scaling_angle", goal_angular_vel_scaling_angle_, 0.55);
-  nh.param("goal_angle_scaling_factor", goal_angle_scaling_factor_, 1.2);
-  nh.param("rotate_to_goal_max_angular_vel", rotate_to_goal_max_angular_vel_, 0.5);
-  nh.param("rotate_to_goal_min_angular_vel", rotate_to_goal_min_angular_vel_, 0.05);
+  nh.param("rotate_to_heading_angular_vel", rotate_to_heading_angular_vel_, 1.8);
+  nh.param("max_angular_accel", max_angular_accel_, 3.2);
   nh.param("transform_tolerance", transform_tolerance_, 0.5);
   nh.param("simulate_ahead_time", simulate_ahead_time_, 1.0);
-  nh.param("controller_frequency", controller_frequency, 15.0);
-  control_duration_ = 1/controller_frequency;
+  control_duration_ = 1/controller_frequency_;
+}
+
+void RotationShimController::reconfigureCB(Config& config, uint32_t level)
+{
+  if (!initialized_) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock_reinit(mutex_);
+  ROS_INFO("%s: Got a new reconfigure.", plugin_name_.c_str());
+  controller_frequency_ = config.controller_frequency;
+  control_duration_ = 1.0 / controller_frequency_;
+  forward_sampling_distance_ = config.forward_sampling_distance;
+  angular_dist_threshold_ = config.angular_dist_threshold;
+  rotate_to_heading_angular_vel_ = config.rotate_to_heading_angular_vel;
+  max_angular_accel_ = config.max_angular_accel;
+  simulate_ahead_time_ = config.simulate_ahead_time;
 }
 
 bool RotationShimController::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan)
@@ -98,40 +123,40 @@ bool RotationShimController::setPlan(const std::vector<geometry_msgs::PoseStampe
   goal_pose_.header.stamp = current_path_[0].header.stamp;
   goal_pose_.pose = current_path_.back().pose;
 
-  return primary_controller_->setPlan(orig_global_plan);
+  return controller_->setPlan(orig_global_plan);
 }
 
 bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
-{
-  costmap_2d::Costmap2D * costmap = costmap_ros_->getCostmap();
-  std::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(costmap->getMutex()));
-
-  std::lock_guard<std::mutex> lock_reinit(mutex_);
-  
+{  
   // Get robot pose
   geometry_msgs::PoseStamped robot_pose;
   costmap_ros_->getRobotPose(robot_pose);
+
+  // Get robot velocity
+  geometry_msgs::PoseStamped robot_vel_tf;
+  odom_helper_.getRobotVel(robot_vel_tf);
+  robot_vel_.linear.x = robot_vel_tf.pose.position.x;
+  robot_vel_.linear.y = robot_vel_tf.pose.position.y;
+  robot_vel_.angular.z = tf2::getYaw(robot_vel_tf.pose.orientation);
   
   if (current_path_.size() >= 2) {
+    std::lock_guard<std::mutex> lock_reinit(mutex_);
+
     geometry_msgs::Pose sampled_pt_base = transformPoseToBaseFrame(getSampledPathPt());
-    double angle_to_path =
+    double angular_distance_to_heading =
           std::atan2(sampled_pt_base.position.y, sampled_pt_base.position.x);
 
     if (path_updated_) {
-      if (shouldRotateToPath(angle_to_path)){
+      if (shouldRotateToPath(angular_distance_to_heading)){
         ROS_DEBUG("%s: Rotating to path heading...", plugin_name_.c_str());
-        if (rotateToHeading(cmd_vel.linear.x,
-                            cmd_vel.angular.z,
-                            angle_to_path,
-                            robot_pose)) {
+        if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_vel_, robot_pose)) {
           return true;
         }
       }
     }
   }
   path_updated_ = false;
-  
-  return primary_controller_->computeVelocityCommands(cmd_vel);
+  return controller_->computeVelocityCommands(cmd_vel);
 }
 
 bool RotationShimController::hasGoalChanged(
@@ -140,7 +165,6 @@ bool RotationShimController::hasGoalChanged(
   if (last_goal_.header.frame_id != new_goal.header.frame_id) {
       return true;
   }
-
   return last_goal_.pose.position.x != new_goal.pose.position.x
          || last_goal_.pose.position.y != new_goal.pose.position.y
          || tf2::getYaw(last_goal_.pose.orientation) != tf2::getYaw(new_goal.pose.orientation);
@@ -148,7 +172,7 @@ bool RotationShimController::hasGoalChanged(
 
 bool RotationShimController::isGoalReached()
 {   
-  if (primary_controller_->isGoalReached()){
+  if (controller_->isGoalReached()){
     has_new_goal_ = true;
     return true;
   }
@@ -170,57 +194,45 @@ geometry_msgs::PoseStamped RotationShimController::getSampledPathPt()
       return current_path_[i];
     }
   }
-
   auto goal = current_path_.back();
   goal.header.frame_id = current_path_.back().header.frame_id;
   goal.header.stamp = ros::Time::now();
   return goal;
 }
 
-bool RotationShimController::shouldRotateToPath(double angle_to_path)
+bool RotationShimController::shouldRotateToPath(const double & angular_distance_to_heading)
 {
   // Whether we should rotate robot to rough path heading
-  return (fabs(angle_to_path) > angular_dist_threshold_);
+  return (fabs(angular_distance_to_heading) > angular_dist_threshold_);
 }
 
-bool RotationShimController::rotateToHeading(
-  double & linear_vel, double & angular_vel,
-  double angle_to_path, const geometry_msgs::PoseStamped & robot_pose)
+bool RotationShimController::computeRotateToHeadingCommand(
+  geometry_msgs::Twist& cmd_vel,
+  const double & angular_distance_to_heading,
+  const geometry_msgs::Twist & velocity,
+  const geometry_msgs::PoseStamped & robot_pose)
 {
   // Rotate in place using max angular velocity / acceleration possible
-  linear_vel = 0.0;
-  const double sign = angle_to_path > 0.0 ? 1.0 : -1.0;
-  double factor;
-  bool is_stopped = fabs(angle_to_path) <= angular_dist_threshold_;
-      
-  if (std::abs(angle_to_path) < (goal_angular_vel_scaling_angle_ + angular_dist_threshold_)) {
-      factor = std::abs(angle_to_path) / goal_angle_scaling_factor_;
-  } else {
-      factor = 1.0;
-  }
+  cmd_vel.linear.x = 0.0;
+  const double sign = angular_distance_to_heading > 0.0 ? 1.0 : -1.0;
+  const double angular_vel = sign * rotate_to_heading_angular_vel_;
+  const double & dt = control_duration_;
+  const double min_feasible_angular_speed = velocity.angular.z - max_angular_accel_ * dt;
+  const double max_feasible_angular_speed = velocity.angular.z + max_angular_accel_ * dt;
 
-  double rotate_to_goal_angular_vel = rotate_to_goal_max_angular_vel_;
-  double unbounded_angular_vel = rotate_to_goal_angular_vel * factor;
-
-  if (unbounded_angular_vel < rotate_to_goal_min_angular_vel_) {
-      rotate_to_goal_angular_vel = rotate_to_goal_min_angular_vel_;
-  } else {
-      rotate_to_goal_angular_vel = unbounded_angular_vel;
-  }
-  if (!isCollisionFree(linear_vel, angular_vel, is_stopped, robot_pose)) {
-    angular_vel = 0.0;
+  if (!isCollisionFree(cmd_vel, angular_distance_to_heading, robot_pose)) {
+    cmd_vel.angular.z = 0.0;
     return false;
   }
+  cmd_vel.angular.z =
+    clamp(angular_vel, min_feasible_angular_speed, max_feasible_angular_speed);
 
-  angular_vel = sign*clamp(rotate_to_goal_angular_vel,
-                           rotate_to_goal_min_angular_vel_,
-                           rotate_to_goal_max_angular_vel_);
   return true;
 }
 
 bool RotationShimController::isCollisionFree(
-  double & linear_vel, double & angular_vel,
-  bool is_stopped,
+  const geometry_msgs::Twist & cmd_vel,
+  const double & angular_distance_to_heading,
   const geometry_msgs::PoseStamped & pose)
 {
   // Simulate rotation ahead by time in control frequency increments
@@ -228,13 +240,15 @@ bool RotationShimController::isCollisionFree(
   double initial_yaw = tf2::getYaw(pose.pose.orientation);
   double yaw = 0.0;
   double footprint_cost = 0.0;
+  double remaining_rotation_before_thresh =
+    fabs(angular_distance_to_heading) - angular_dist_threshold_;
 
   while (simulated_time < simulate_ahead_time_) {
     simulated_time += control_duration_;
-    yaw = initial_yaw + angular_vel * simulated_time;
+    yaw = initial_yaw + cmd_vel.angular.z * simulated_time;
 
     // Stop simulating past the point it would be passed onto the primary controller
-    if (is_stopped) {
+    if (angles::shortest_angular_distance(yaw, initial_yaw) >= remaining_rotation_before_thresh) {
       break;
     }
 

@@ -15,9 +15,15 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   angles
   visualization_msgs
+  dynamic_reconfigure
 )
 
 find_package(Boost REQUIRED)
+
+## Generate dynamic reconfigure parameters in the 'cfg' folder
+generate_dynamic_reconfigure_options(
+  cfg/RotationShimControllerReconfigure.cfg
+)
 
 # Declare a catkin package
 catkin_package(
@@ -31,7 +37,7 @@ catkin_package(
     tf2_ros
     pluginlib
     angles
-    visualization_msgs
+    dynamic_reconfigure
 )
 
 ###########
