@@ -80,15 +80,8 @@ protected:
      * @return location of the pose in base frame
      */
     geometry_msgs::Pose transformPoseToBaseFrame(const geometry_msgs::PoseStamped & pt);
-
-    /**
-     * @return Path length in thresh
-     */
-    double pathLength();
     
-    bool shouldRotateToPath(
-        const double & angular_distance_to_heading,
-        const double path_length);
+    bool shouldRotateToPath(const double & angular_distance_to_heading);
 
     bool computeRotateToHeadingCommand(
         geometry_msgs::Twist& cmd_vel,
@@ -133,7 +126,6 @@ protected:
     double simulate_ahead_time_;
     double transform_tolerance_;
     double control_duration_, controller_frequency_;
-    double path_length_thresh_;
 
     std::vector<geometry_msgs::PoseStamped> current_path_;
     geometry_msgs::PoseStamped goal_pose_;
@@ -142,7 +134,6 @@ protected:
     bool initialized_;
     bool has_new_goal_;
     bool path_updated_;
-    double path_length_;
 
     // Dynamic parameters handler
     std::mutex mutex_;

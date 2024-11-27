@@ -30,7 +30,6 @@ void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, c
     tf_ = tf;
     costmap_ros_ = costmap_ros;
     has_new_goal_ = true;
-    path_length_ = std::numeric_limits<double>::max();
 
     // Initialize parameters
     initParams(nh);
@@ -70,7 +69,6 @@ void RotationShimController::initParams(ros::NodeHandle& nh)
   nh.param("primary_controller", primary_controller_, std::string("teb_local_planner/TebLocalPlannerROS"));
   nh.param("controller_frequency", controller_frequency_, 15.0);
   nh.param("forward_sampling_distance", forward_sampling_distance_, 0.5);
-  nh.param("path_length_thresh", path_length_thresh_, 3.0);
   nh.param("angular_dist_threshold", angular_dist_threshold_, 0.55);
   nh.param("angular_vel_scaling_angle", angular_vel_scaling_angle_, 0.26);
   nh.param("angle_scaling_factor", angle_scaling_factor_, 0.8);
@@ -118,7 +116,6 @@ bool RotationShimController::setPlan(const std::vector<geometry_msgs::PoseStampe
     last_goal_ = goal_pose_;
     has_new_goal_ = false;
     path_updated_ = true;
-    path_length_ = pathLength();
   }
 
   // Save goal pose
@@ -143,7 +140,7 @@ bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_v
 
       if (path_updated_) {
         std::lock_guard<std::mutex> lock_reinit(mutex_);
-        if (shouldRotateToPath(angular_distance_to_heading, path_length_)){
+        if (shouldRotateToPath(angular_distance_to_heading)){
           if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_pose)) {
             return true;
           }
@@ -200,29 +197,11 @@ geometry_msgs::PoseStamped RotationShimController::getSampledPathPt()
   return goal;
 }
 
-double RotationShimController::pathLength()
-{
-  geometry_msgs::Pose start = current_path_.front().pose;
-  double dx, dy;
-
-  // Find the length at least sampling distance away
-  for (unsigned int i = 1; i != current_path_.size(); i++) {
-    dx = current_path_[i].pose.position.x - start.position.x;
-    dy = current_path_[i].pose.position.y - start.position.y;
-    if (hypot(dx, dy) >= path_length_thresh_) {
-      return hypot(dx, dy);
-    }
-  }
-  return std::numeric_limits<double>::min();
-}
-
 bool RotationShimController::shouldRotateToPath(
-  const double & angular_distance_to_heading,
-  const double path_length)
+  const double & angular_distance_to_heading)
 {
   // Whether we should rotate robot to rough path heading
-  return (fabs(angular_distance_to_heading) > angular_dist_threshold_
-          && path_length >= path_length_thresh_);
+  return (fabs(angular_distance_to_heading) > angular_dist_threshold_);
 }
 
 bool RotationShimController::computeRotateToHeadingCommand(

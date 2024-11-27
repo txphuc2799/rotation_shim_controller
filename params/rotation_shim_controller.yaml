@@ -8,7 +8,6 @@ RotationShimController:
   simulate_ahead_time: 1.0
   angular_dist_threshold: 0.17 # Angle threshold for switch to primary controller
   forward_sampling_distance: 0.5
-  path_length_thresh: 2.0
   angular_vel_scaling_angle: 0.26
   angle_scaling_factor: 0.8
   max_angular_vel: 0.4
