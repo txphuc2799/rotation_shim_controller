@@ -136,18 +136,23 @@ bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_v
   costmap_ros_->getRobotPose(robot_pose);
   
   if (current_path_.size() >= 2) {
-    std::lock_guard<std::mutex> lock_reinit(mutex_);
+    try {
+      geometry_msgs::Pose sampled_pt_base = transformPoseToBaseFrame(getSampledPathPt());
+      double angular_distance_to_heading =
+            std::atan2(sampled_pt_base.position.y, sampled_pt_base.position.x);
 
-    geometry_msgs::Pose sampled_pt_base = transformPoseToBaseFrame(getSampledPathPt());
-    double angular_distance_to_heading =
-          std::atan2(sampled_pt_base.position.y, sampled_pt_base.position.x);
-
-    if (path_updated_) {
-      if (shouldRotateToPath(angular_distance_to_heading, path_length_)){
-        if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_pose)) {
-          return true;
+      if (path_updated_) {
+        std::lock_guard<std::mutex> lock_reinit(mutex_);
+        if (shouldRotateToPath(angular_distance_to_heading, path_length_)){
+          if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_pose)) {
+            return true;
+          }
         }
       }
+    }
+    catch(const std::runtime_error& e) {
+      std::cerr << e.what() << '\n';
+      return false;
     }
   }
   path_updated_ = false;
