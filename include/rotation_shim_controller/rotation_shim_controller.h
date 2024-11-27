@@ -86,13 +86,14 @@ protected:
      */
     double pathLength();
     
-    bool shouldRotateToPath(const double & angular_distance_to_heading,
-                            const double path_length);
+    bool shouldRotateToPath(
+        const double & angular_distance_to_heading,
+        const double path_length);
 
-    bool computeRotateToHeadingCommand(geometry_msgs::Twist& cmd_vel,
-                                       const double & angular_distance_to_heading,
-                                       const geometry_msgs::Twist & velocity,
-                                       const geometry_msgs::PoseStamped & robot_pose);
+    bool computeRotateToHeadingCommand(
+        geometry_msgs::Twist& cmd_vel,
+        const double & angular_distance_to_heading,
+        const geometry_msgs::PoseStamped & robot_pose);
 
     bool hasGoalChanged(const geometry_msgs::PoseStamped &new_goal);
     
@@ -116,7 +117,6 @@ protected:
 protected:
     pluginlib::ClassLoader<nav_core::BaseLocalPlanner> lp_loader_;
     boost::shared_ptr<nav_core::BaseLocalPlanner> controller_;
-    base_local_planner::OdometryHelperRos odom_helper_;
     std::unique_ptr<FootprintCollisionChecker<costmap_2d::Costmap2D *>>
     collision_checker_;
 
@@ -125,16 +125,16 @@ protected:
 
     std::string primary_controller_;
     std::string plugin_name_ = "RotationShimController";
-    std::string odom_topic_;
     double forward_sampling_distance_, angular_dist_threshold_;
-    double rotate_to_heading_angular_vel_;
-    double max_angular_accel_;
+    double angular_vel_scaling_angle_;
+    double angle_scaling_factor_;
+    double max_angular_vel_;
+    double min_angular_vel_;
     double simulate_ahead_time_;
     double transform_tolerance_;
     double control_duration_, controller_frequency_;
     double path_length_thresh_;
 
-    geometry_msgs::Twist robot_vel_;
     std::vector<geometry_msgs::PoseStamped> current_path_;
     geometry_msgs::PoseStamped goal_pose_;
     geometry_msgs::PoseStamped last_goal_;
