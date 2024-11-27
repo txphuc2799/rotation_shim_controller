@@ -1,15 +1,16 @@
 base_local_planner: rotation_shim_controller/RotationShimController
 RotationShimController:
   primary_controller: teb_local_planner/TebLocalPlannerROS
-  odom_topic: /odometry/filtered
   controller_frequency: 20.0
-  forward_sampling_distance: 0.5
-  path_length_thresh: 3.0
-  angular_dist_threshold: 0.55
-  rotate_to_heading_angular_vel: 0.5
-  max_angular_accel: 1.0
   transform_tolerance: 0.5
   simulate_ahead_time: 1.0
+  angular_dist_threshold: 0.17 # Angle threshold for switch to primary controller
+  path_length_thresh: 1.5
+  forward_sampling_distance: 0.5
+  angular_vel_scaling_angle: 0.26
+  angle_scaling_factor: 0.8
+  max_angular_vel: 0.4
+  min_angular_vel: 0.1
 
   # Vector Pure Pursuit
   VectorPursuitController:

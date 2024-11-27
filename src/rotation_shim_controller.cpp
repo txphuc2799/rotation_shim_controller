@@ -92,6 +92,10 @@ void RotationShimController::reconfigureCB(Config& config, uint32_t level)
   control_duration_ = 1.0 / controller_frequency_;
   forward_sampling_distance_ = config.forward_sampling_distance;
   angular_dist_threshold_ = config.angular_dist_threshold;
+  angular_vel_scaling_angle_ = config.angular_vel_scaling_angle;
+  angle_scaling_factor_ = config.angle_scaling_factor;
+  max_angular_vel_ = config.max_angular_vel;
+  min_angular_vel_ = config.min_angular_vel;
   simulate_ahead_time_ = config.simulate_ahead_time;
 }
 
