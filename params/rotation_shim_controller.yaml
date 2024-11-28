@@ -8,9 +8,10 @@ RotationShimController:
   simulate_ahead_time: 1.0
   angular_dist_threshold: 0.17 # Angle threshold for switch to primary controller
   forward_sampling_distance: 0.5
-  angular_vel_scaling_angle: 0.26
-  angle_scaling_factor: 0.8
+  angle_threshold: 0.35
   max_angular_vel: 0.4
+  max_angular_accel: 0.7
+  max_angular_deccel: 0.3
   min_angular_vel: 0.1
 
   # TEB Local Planner

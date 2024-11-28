@@ -34,6 +34,9 @@ void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, c
     // Initialize parameters
     initParams(nh);
 
+    // init the odom helper to receive the robot's velocity from odom messages
+    odom_helper_.setOdomTopic(odom_topic_);
+
     try{
       controller_ = lp_loader_.createUniqueInstance(primary_controller_);
       std::size_t pos = primary_controller_.find_last_of("/");
@@ -67,12 +70,14 @@ void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, c
 void RotationShimController::initParams(ros::NodeHandle& nh)
 {
   nh.param("primary_controller", primary_controller_, std::string("teb_local_planner/TebLocalPlannerROS"));
+  nh.param("odom_topic", odom_topic_, std::string("odom"));
   nh.param("controller_frequency", controller_frequency_, 15.0);
   nh.param("forward_sampling_distance", forward_sampling_distance_, 0.5);
   nh.param("angular_dist_threshold", angular_dist_threshold_, 0.55);
-  nh.param("angular_vel_scaling_angle", angular_vel_scaling_angle_, 0.26);
-  nh.param("angle_scaling_factor", angle_scaling_factor_, 0.8);
+  nh.param("angle_threshold", angle_threshold_, 0.35);
   nh.param("max_angular_vel", max_angular_vel_, 0.4);
+  nh.param("max_angular_accel", max_angular_accel_, 0.7);
+  nh.param("max_angular_deccel", max_angular_deccel_, 0.3);
   nh.param("min_angular_vel", min_angular_vel_, 0.1);
   nh.param("transform_tolerance", transform_tolerance_, 0.5);
   nh.param("simulate_ahead_time", simulate_ahead_time_, 1.0);
@@ -90,9 +95,10 @@ void RotationShimController::reconfigureCB(Config& config, uint32_t level)
   control_duration_ = 1.0 / controller_frequency_;
   forward_sampling_distance_ = config.forward_sampling_distance;
   angular_dist_threshold_ = config.angular_dist_threshold;
-  angular_vel_scaling_angle_ = config.angular_vel_scaling_angle;
-  angle_scaling_factor_ = config.angle_scaling_factor;
+  angle_threshold_ = config.angle_threshold;
   max_angular_vel_ = config.max_angular_vel;
+  max_angular_accel_ = config.max_angular_accel;
+  max_angular_deccel_ = config.max_angular_deccel;
   min_angular_vel_ = config.min_angular_vel;
   simulate_ahead_time_ = config.simulate_ahead_time;
 }
@@ -131,6 +137,13 @@ bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_v
   // Get robot pose
   geometry_msgs::PoseStamped robot_pose;
   costmap_ros_->getRobotPose(robot_pose);
+
+  // Get robot velocity
+  geometry_msgs::PoseStamped robot_vel_tf;
+  odom_helper_.getRobotVel(robot_vel_tf);
+  robot_vel_.linear.x = robot_vel_tf.pose.position.x;
+  robot_vel_.linear.y = robot_vel_tf.pose.position.y;
+  robot_vel_.angular.z = tf2::getYaw(robot_vel_tf.pose.orientation);
   
   if (current_path_.size() >= 2) {
     try {
@@ -141,7 +154,7 @@ bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_v
       if (path_updated_) {
         std::lock_guard<std::mutex> lock_reinit(mutex_);
         if (shouldRotateToPath(angular_distance_to_heading)){
-          if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_pose)) {
+          if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_vel_, robot_pose)) {
             return true;
           }
         }
@@ -198,42 +211,44 @@ geometry_msgs::PoseStamped RotationShimController::getSampledPathPt()
 }
 
 bool RotationShimController::shouldRotateToPath(
-  const double & angular_distance_to_heading)
+  double & angular_distance_to_heading)
 {
+  double angle_to_path = angular_distance_to_heading;
+
+  angular_distance_to_heading = angle_to_path >= 0.0 ? angle_to_path - angular_dist_threshold_ :
+                                                       angle_to_path + angular_dist_threshold_;
+
   // Whether we should rotate robot to rough path heading
-  return (fabs(angular_distance_to_heading) > angular_dist_threshold_);
+  return (fabs(angle_to_path) > angular_dist_threshold_);
 }
 
 bool RotationShimController::computeRotateToHeadingCommand(
   geometry_msgs::Twist& cmd_vel,
   const double & angular_distance_to_heading,
+  geometry_msgs::Twist& curr_vel,
   const geometry_msgs::PoseStamped & robot_pose)
 {
   // Rotate in place using max angular velocity / acceleration possible
   cmd_vel.linear.x = 0.0;
   const double sign = angular_distance_to_heading > 0.0 ? 1.0 : -1.0;
-  double factor;
+  cmd_vel.angular.z = sign * max_angular_vel_;
+  const double & dt = control_duration_;
 
-  if (std::fabs(angular_distance_to_heading) < (angular_vel_scaling_angle_ + angular_dist_threshold_)) {
-    factor = std::fabs(angular_distance_to_heading) / angle_scaling_factor_;
-  } else {
-    factor = 1.0;
-  }
+  const double min_feasible_angular_speed = curr_vel.angular.z - max_angular_accel_ * dt;
+  const double max_feasible_angular_speed = curr_vel.angular.z + max_angular_accel_ * dt;
+  cmd_vel.angular.z = clamp(cmd_vel.angular.z, min_feasible_angular_speed, max_feasible_angular_speed);
 
-  double angular_vel = max_angular_vel_;
-  double unbounded_angular_vel = angular_vel * factor;
-
-  if (unbounded_angular_vel < min_angular_vel_) {
-    angular_vel = min_angular_vel_;
-  } else {
-    angular_vel = unbounded_angular_vel;
+  if (fabs(angular_distance_to_heading) < angle_threshold_) {
+    cmd_vel.angular.z = 
+      sign * clamp(max_angular_vel_ * fabs(angular_distance_to_heading) / max_angular_deccel_,
+                   min_angular_vel_, max_angular_vel_);
   }
 
   if (!isCollisionFree(cmd_vel, angular_distance_to_heading, robot_pose)) {
     cmd_vel.angular.z = 0.0;
     return false;
   }
-  cmd_vel.angular.z = sign * clamp(angular_vel, min_angular_vel_, max_angular_vel_);
+
   return true;
 }
 
