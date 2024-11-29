@@ -58,10 +58,6 @@ void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, c
     CallbackType cb = boost::bind(&RotationShimController::reconfigureCB, this, _1, _2);
     dynamic_srv_->setCallback(cb);
 
-    // Create subscriber:
-    run_controller_sub_ = nh.subscribe<std_msgs::Bool>("/run_rs_controller", 5,
-                                                       &RotationShimController::runControllerCallback, this);
-
     ROS_INFO("Initialized %s plugin", plugin_name_.c_str());
     initialized_ = true;
   }
@@ -302,11 +298,6 @@ RotationShimController::transformPoseToBaseFrame(const geometry_msgs::PoseStampe
     throw std::runtime_error("Failed to transform pose to base frame!");
   }
   return pt_base.pose;
-}
-
-void RotationShimController::runControllerCallback(const std_msgs::Bool::ConstPtr& msg)
-{
-  path_updated_ = msg->data;
 }
     
 } // namespace rotation_shim_controller
