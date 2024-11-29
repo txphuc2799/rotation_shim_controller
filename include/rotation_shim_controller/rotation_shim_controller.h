@@ -91,8 +91,6 @@ protected:
 
     bool hasGoalChanged(const geometry_msgs::PoseStamped &new_goal);
     
-    void runControllerCallback(const std_msgs::Bool::ConstPtr& msg);
-
     void initParams(ros::NodeHandle& nh);
 
     /**
@@ -143,8 +141,6 @@ protected:
     // Dynamic parameters handler
     std::mutex mutex_;
     ParamterConfigServer* dynamic_srv_;
-
-    ros::Subscriber run_controller_sub_;
 };
 } // namespace rotation_shim_controller
 
