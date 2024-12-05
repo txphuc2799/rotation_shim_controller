@@ -114,16 +114,17 @@ bool RotationShimController::setPlan(const std::vector<geometry_msgs::PoseStampe
     return false;
   }
 
-  if (has_new_goal_ || hasGoalChanged(goal_pose_)) {
-    last_goal_ = goal_pose_;
-    has_new_goal_ = false;
-    path_updated_ = true;
-  }
-
   // Save goal pose
   goal_pose_.header.frame_id = current_path_[0].header.frame_id;
   goal_pose_.header.stamp = current_path_[0].header.stamp;
   goal_pose_.pose = current_path_.back().pose;
+
+  if (has_new_goal_ || hasGoalChanged(goal_pose_))
+  {
+    last_goal_ = goal_pose_;
+    has_new_goal_ = false;
+    path_updated_ = true;
+  }
 
   return controller_->setPlan(orig_global_plan);
 }
