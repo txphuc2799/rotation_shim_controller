@@ -299,5 +299,9 @@ RotationShimController::transformPoseToBaseFrame(const geometry_msgs::PoseStampe
   }
   return pt_base.pose;
 }
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 20af4a4e7897805e33a2e35ac59b56698f25d4b0
 } // namespace rotation_shim_controller

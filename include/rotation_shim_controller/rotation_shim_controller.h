@@ -90,7 +90,11 @@ protected:
         const geometry_msgs::PoseStamped & robot_pose);
 
     bool hasGoalChanged(const geometry_msgs::PoseStamped &new_goal);
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 20af4a4e7897805e33a2e35ac59b56698f25d4b0
     void initParams(ros::NodeHandle& nh);
 
     /**
