@@ -53,6 +53,12 @@ include_directories(
 
 add_library(${PROJECT_NAME} src/footprint_collision_checker.cpp
                             src/rotation_shim_controller.cpp)
+
+## Add cmake target dependencies of the library
+## as an example, code may need to be generated before libraries
+## either from message generation or dynamic reconfigure
+add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 
 #############
@@ -61,9 +67,7 @@ target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 
 # Install targets
 install(TARGETS ${PROJECT_NAME}
-        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
         LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
 # Install plugins
