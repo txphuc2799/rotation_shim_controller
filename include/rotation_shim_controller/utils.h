@@ -26,9 +26,10 @@ double deg2rad(double degrees) {
 }
 
 inline bool transformPoseInTargetFrame(
+  tf2_ros::Buffer * tf_buffer,
   const geometry_msgs::PoseStamped & input_pose,
   geometry_msgs::PoseStamped & transformed_pose,
-  tf2_ros::Buffer * tf_buffer, const std::string target_frame,
+  const std::string target_frame,
   const double transform_timeout)
 {
   std::string controller_name = "RotationShimController";

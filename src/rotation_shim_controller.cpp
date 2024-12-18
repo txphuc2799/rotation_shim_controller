@@ -30,6 +30,7 @@ void RotationShimController::initialize(std::string name, tf2_ros::Buffer *tf, c
     tf_ = tf;
     costmap_ros_ = costmap_ros;
     has_new_goal_ = true;
+    goal_changed_ = true;
 
     // Initialize parameters
     initParams(nh);
@@ -123,6 +124,7 @@ bool RotationShimController::setPlan(const std::vector<geometry_msgs::PoseStampe
   {
     last_goal_ = goal_pose_;
     has_new_goal_ = false;
+    goal_changed_ = true;
     path_updated_ = true;
   }
 
@@ -151,8 +153,10 @@ bool RotationShimController::computeVelocityCommands(geometry_msgs::Twist& cmd_v
       if (path_updated_) {
         std::lock_guard<std::mutex> lock_reinit(mutex_);
         if (shouldRotateToPath(angular_distance_to_heading)){
-          if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_vel_, robot_pose)) {
-            return true;
+          if (isSafeRotate(robot_pose, angular_distance_to_heading)){
+            if (computeRotateToHeadingCommand(cmd_vel, angular_distance_to_heading, robot_vel_, robot_pose)) {
+              return true;
+            }
           }
         }
       }
@@ -181,6 +185,7 @@ bool RotationShimController::isGoalReached()
 {   
   if (controller_->isGoalReached()){
     has_new_goal_ = true;
+    goal_changed_ = true;
     return true;
   }
   return false;
@@ -291,11 +296,57 @@ bool RotationShimController::isCollisionFree(
   return true;
 }
 
+bool RotationShimController::isSafeRotate(
+  const geometry_msgs::PoseStamped & pose,
+  double yaw)
+{
+  if (!goal_changed_) {
+    return true;
+  }
+
+  const double step_size = 0.1;
+  const int steps = static_cast<int>(std::ceil(std::abs(yaw) / step_size));
+  const double step_sign = (yaw > 0) ? 1.0 : -1.0;
+
+  std::vector<geometry_msgs::Point> footprint = costmap_ros_->getRobotFootprint();
+
+  for (int i = 0; i <= steps; ++i)
+  {
+    double current_angle = tf2::getYaw(pose.pose.orientation) + i * step_sign * step_size;
+    if (i == steps) current_angle = tf2::getYaw(pose.pose.orientation) + yaw;
+      std::vector<geometry_msgs::Point> rotated_footprint;
+      for (const auto& point : footprint)
+      {
+        geometry_msgs::Point rotated_point;
+        double new_x = std::cos(current_angle) * point.x - std::sin(current_angle) * point.y;
+        double new_y = std::sin(current_angle) * point.x + std::cos(current_angle) * point.y;
+        rotated_point.x = new_x + pose.pose.position.x;
+        rotated_point.y = new_y + pose.pose.position.y;
+        rotated_footprint.push_back(rotated_point);
+      }
+      for (const auto& point : rotated_footprint)
+      {
+        unsigned int mx, my;
+        if (costmap_ros_->getCostmap()->worldToMap(point.x, point.y, mx, my))
+        {
+          unsigned char cost = costmap_ros_->getCostmap()->getCost(mx, my);
+          if (cost == costmap_2d::LETHAL_OBSTACLE) {
+            ROS_WARN("RotationShimController: Not safe for rotate!");
+            return false;
+          }
+        }
+      }
+  }
+  goal_changed_ = false;
+  ROS_INFO("RotationShimController: No collision detected during rotation.");
+  return true;
+}
+
 geometry_msgs::Pose
 RotationShimController::transformPoseToBaseFrame(const geometry_msgs::PoseStamped & pt)
 {
   geometry_msgs::PoseStamped pt_base;
-  if (!transformPoseInTargetFrame(pt, pt_base, tf_, costmap_ros_->getBaseFrameID(), transform_tolerance_)) {
+  if (!transformPoseInTargetFrame(tf_, pt, pt_base, costmap_ros_->getBaseFrameID(), transform_tolerance_)) {
     throw std::runtime_error("Failed to transform pose to base frame!");
   }
   return pt_base.pose;

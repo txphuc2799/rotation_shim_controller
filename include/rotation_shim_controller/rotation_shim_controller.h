@@ -103,6 +103,10 @@ protected:
         const geometry_msgs::Twist & cmd_vel,
         const double & angular_distance_to_heading,
         const geometry_msgs::PoseStamped & pose);
+
+    bool isSafeRotate(
+        const geometry_msgs::PoseStamped & pose,
+        double yaw);
     
     void reconfigureCB(Config& config, uint32_t level);
 
@@ -137,6 +141,7 @@ protected:
     bool initialized_;
     bool has_new_goal_;
     bool path_updated_;
+    bool goal_changed_;
 
     // Dynamic parameters handler
     std::mutex mutex_;
