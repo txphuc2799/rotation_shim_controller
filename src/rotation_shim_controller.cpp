@@ -1,4 +1,4 @@
-#include <rotation_shim_controller/rotation_shim_controller.h>
+#include <rotation_shim_controller/rotation_shim_controller.hpp>
 #include <pluginlib/class_list_macros.h>
 #include <angles/angles.h>
 

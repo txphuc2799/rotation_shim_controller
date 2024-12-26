@@ -1,5 +1,5 @@
-#ifndef __ROTATION_SHIM_CONTROLLER_H__
-#define __ROTATION_SHIM_CONTROLLER_H__
+#ifndef __ROTATION_SHIM_CONTROLLER_HPP__
+#define __ROTATION_SHIM_CONTROLLER_HPP__
 
 #include <ros/ros.h>
 #include <nav_core/base_local_planner.h>
@@ -11,7 +11,7 @@
 #include <tf2/utils.h>
 #include <tf2_ros/buffer.h>
 #include <std_msgs/Bool.h>
-#include <rotation_shim_controller/utils.h>
+#include <rotation_shim_controller/utils.hpp>
 #include <rotation_shim_controller/footprint_collision_checker.hpp>
 #include <rotation_shim_controller/RotationShimControllerConfig.h>
 #include <dynamic_reconfigure/server.h>
@@ -149,4 +149,4 @@ protected:
 };
 } // namespace rotation_shim_controller
 
-#endif  // __ROTATION_SHIM_CONTROLLER_H__
+#endif  // __ROTATION_SHIM_CONTROLLER_HPP__

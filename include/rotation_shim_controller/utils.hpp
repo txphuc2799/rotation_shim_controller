@@ -1,5 +1,5 @@
-#ifndef ROTATION_SHIM_CONTROLLER__MATH_HELPER_H_
-#define ROTATION_SHIM_CONTROLLER__MATH_HELPER_H_
+#ifndef __ROTATION_SHIM_CONTROLLER__MATH_HELPER_HPP__
+#define __ROTATION_SHIM_CONTROLLER__MATH_HELPER_HPP__
 
 #include <cmath>
 #include <geometry_msgs/PoseStamped.h>
@@ -95,4 +95,4 @@ inline bool invalidPathSegment(std::vector<geometry_msgs::PoseStamped> &global_p
 
 } // namespace rotation_shim_controller
 
-#endif // ROTATION_SHIM_CONTROLLER__MATH_HELPER_H_
+#endif // __ROTATION_SHIM_CONTROLLER__MATH_HELPER_HPP__
